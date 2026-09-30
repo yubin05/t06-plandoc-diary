@@ -426,7 +426,8 @@
       try{ tags = JSON.parse(t.tags || "[]"); }catch(e){ tags = []; }
       var metaLine = el("div", { className: "meta" });
       metaLine.appendChild(document.createTextNode(
-        "마감 " + (t.due_date || "-") + " · 우선순위 " + t.priority + " · 예상 " + t.estimated_hours + "h" + " · "
+        "마감 " + (t.due_date || "-") + " · 우선순위 " + t.priority + " · 예상 " + t.estimated_hours + "h" +
+        " · 실행 기록 " + (t.log_count || 0) + "건" + " · "
       ));
       tags.forEach(function(tag){ metaLine.appendChild(el("span", { className: "tag", text: tag })); });
       item.appendChild(metaLine);
@@ -448,7 +449,7 @@
         if(!window.confirm("이 할 일을 지울까요?")) return;
         await api("/api/tasks/" + t.id, { method: "DELETE" }); await loadTasks(); await loadReview();
       });
-      var logBtn = el("button", { className: "small", text: "실행 기록 추가" });
+      var logBtn = el("button", { className: "small", text: "실행 기록 보기/추가" });
       var logBox = el("div", { className: "log-list" });
       logBtn.addEventListener("click", function(){ toggleLogForm(t, logBox); });
       btnRow.appendChild(editBtn);

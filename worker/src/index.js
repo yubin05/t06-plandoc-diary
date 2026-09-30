@@ -106,7 +106,7 @@ async function listTasks(env, url) {
   const tag = url.searchParams.get("tag");
   const sort = url.searchParams.get("sort") || "due_date_asc";
 
-  let sql = "SELECT * FROM tasks WHERE deleted_at IS NULL";
+  let sql = "SELECT tasks.*, (SELECT COUNT(*) FROM execution_logs WHERE execution_logs.task_id = tasks.id) AS log_count FROM tasks WHERE deleted_at IS NULL";
   const params = [];
   if (planId) { sql += " AND plan_id = ?"; params.push(planId); }
   if (status) { sql += " AND status = ?"; params.push(status); }
