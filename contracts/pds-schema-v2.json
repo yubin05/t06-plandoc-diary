@@ -1,0 +1,99 @@
+{
+  "schema_version": "v2",
+  "database": "Cloudflare D1 (SQLite)",
+  "timezone_rule": {
+    "storage": "모든 시각(*_at)은 UTC ISO-8601 문자열로 저장한다.",
+    "date_only": "period_start/period_end/due_date는 YYYY-MM-DD, 별도 시간대 없이 저장한다.",
+    "today_reference": "지연(overdue) 판정의 '오늘'은 서버에서 Asia/Seoul(UTC+9, DST 없음) 기준으로 계산한다."
+  },
+  "tables": {
+    "plans": {
+      "columns": {
+        "id": "TEXT PK (uuid)",
+        "title": "TEXT",
+        "period_start": "TEXT (YYYY-MM-DD)",
+        "period_end": "TEXT (YYYY-MM-DD)",
+        "priority": "TEXT: high|medium|low",
+        "success_criteria": "TEXT",
+        "estimated_hours": "REAL",
+        "source_reflection_id": "TEXT nullable, FK -> reflections.id",
+        "created_at": "TEXT (ISO datetime, UTC)",
+        "updated_at": "TEXT (ISO datetime, UTC)"
+      }
+    },
+    "plan_history": {
+      "purpose": "plans를 UPDATE하기 직전, 수정 전 값의 스냅샷을 append-only로 남긴다.",
+      "columns": {
+        "id": "TEXT PK",
+        "plan_id": "TEXT FK -> plans.id",
+        "title": "TEXT (수정 전 값)",
+        "period_start": "TEXT (수정 전 값)",
+        "period_end": "TEXT (수정 전 값)",
+        "priority": "TEXT (수정 전 값)",
+        "success_criteria": "TEXT (수정 전 값)",
+        "estimated_hours": "REAL (수정 전 값)",
+        "snapshot_at": "TEXT (ISO datetime, UTC) — 이 수정이 일어난 시각"
+      }
+    },
+    "tasks": {
+      "columns": {
+        "id": "TEXT PK (uuid)",
+        "plan_id": "TEXT FK -> plans.id",
+        "title": "TEXT",
+        "status": "TEXT: in_progress|done",
+        "due_date": "TEXT nullable (YYYY-MM-DD)",
+        "priority": "TEXT: high|medium|low",
+        "tags": "TEXT (JSON 배열 문자열)",
+        "estimated_hours": "REAL",
+        "completed_at": "TEXT nullable (ISO datetime, UTC)",
+        "deleted_at": "TEXT nullable (ISO datetime, UTC) — NULL이면 살아있는 할 일",
+        "created_at": "TEXT (ISO datetime, UTC)",
+        "updated_at": "TEXT (ISO datetime, UTC)"
+      }
+    },
+    "completion_events": {
+      "purpose": "완료 전환을 append-only로 기록. 같은 순간의 중복 요청은 tasks.status가 이미 done이면 UPDATE가 0행이라 행이 추가되지 않는다(멱등).",
+      "columns": {
+        "id": "TEXT PK",
+        "task_id": "TEXT FK -> tasks.id",
+        "completed_at": "TEXT (ISO datetime, UTC)"
+      }
+    },
+    "execution_logs": {
+      "columns": {
+        "id": "TEXT PK",
+        "task_id": "TEXT FK -> tasks.id",
+        "started_at": "TEXT (ISO datetime, UTC)",
+        "ended_at": "TEXT (ISO datetime, UTC)",
+        "actual_minutes": "REAL",
+        "blocked_reason": "TEXT nullable",
+        "created_at": "TEXT (ISO datetime, UTC)"
+      }
+    },
+    "reflections": {
+      "columns": {
+        "id": "TEXT PK",
+        "plan_id": "TEXT FK -> plans.id — 어떤 계획을 돌아보며 나온 메모인지",
+        "note": "TEXT — 다음 계획으로 넘길 고칠 점 한 줄",
+        "created_at": "TEXT (ISO datetime, UTC)"
+      }
+    }
+  },
+  "relationships": [
+    "plans 1 --- N tasks (tasks.plan_id)",
+    "plans 1 --- N plan_history (plan_history.plan_id)",
+    "tasks 1 --- N execution_logs (execution_logs.task_id)",
+    "tasks 1 --- N completion_events (completion_events.task_id)",
+    "plans 1 --- N reflections (reflections.plan_id)",
+    "reflections 1 --- 0..1 plans (plans.source_reflection_id) — 다음 계획이 이전 돌아보기를 참조"
+  ],
+  "aggregation_rules": {
+    "planned_count": "COUNT(tasks WHERE plan_id=X AND deleted_at IS NULL)",
+    "done_count": "COUNT(tasks WHERE ... AND status='done')",
+    "overdue_count": "COUNT(tasks WHERE status!='done' AND due_date IS NOT NULL AND due_date < today_kst)",
+    "blocked_count": "COUNT(DISTINCT tasks.id) WHERE 해당 task에 blocked_reason이 비어있지 않은 execution_logs가 1건 이상",
+    "estimated_hours_sum": "SUM(tasks.estimated_hours)",
+    "actual_hours_sum": "SUM(execution_logs.actual_minutes) / 60",
+    "diff_hours": "actual_hours_sum - estimated_hours_sum"
+  }
+}

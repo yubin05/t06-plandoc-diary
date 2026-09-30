@@ -1,0 +1,12 @@
+name = "t06-plandoc-diary"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "t06-plandoc-diary-db"
+database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
