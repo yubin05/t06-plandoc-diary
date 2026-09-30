@@ -178,7 +178,14 @@
     return e;
   }
   function clearChildren(node){ while(node.firstChild) node.removeChild(node.firstChild); }
-  function fmtDate(iso){ if(!iso) return "-"; return iso.length > 10 ? iso.slice(0,16).replace("T"," ") : iso; }
+  function fmtDate(iso){
+    if(!iso) return "-";
+    if(iso.length <= 10) return iso; // 날짜만 있는 값(YYYY-MM-DD)은 그대로
+    var d = new Date(iso);
+    if(isNaN(d.getTime())) return iso;
+    var f = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false });
+    return f.format(d) + " KST";
+  }
 
   async function api(path, opts){
     var res = await fetch(path, opts);
