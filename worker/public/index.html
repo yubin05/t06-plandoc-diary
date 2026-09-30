@@ -167,7 +167,7 @@
 (function(){
   "use strict";
 
-  var state = { plans: [], selectedPlanId: null, tasks: [], extraFilter: null }; // extraFilter: null | 'overdue' | 'blocked'
+  var state = { plans: [], selectedPlanId: null, tasks: [], extraFilter: null, editingPlanId: null, editingTaskId: null }; // extraFilter: null | 'overdue' | 'blocked'
 
   function el(tag, opts){
     var e = document.createElement(tag);
@@ -211,6 +211,13 @@
     }
     state.plans.forEach(function(p){
       var item = el("div", { className: "plan-item" + (p.id === state.selectedPlanId ? " selected" : "") });
+
+      if(state.editingPlanId === p.id){
+        item.appendChild(buildPlanEditForm(p));
+        list.appendChild(item);
+        return;
+      }
+
       var h3 = el("h3", { text: p.title + " " });
       h3.addEventListener("click", function(){ selectPlan(p.id); });
       var badge = el("span", { className: "tag", text: p.priority });
@@ -220,8 +227,8 @@
       item.appendChild(el("div", { className: "meta", text: "성공 기준: " + p.success_criteria }));
 
       var btnRow = el("div", { className: "btn-row" });
-      var editBtn = el("button", { className: "small", text: "제목 수정" });
-      editBtn.addEventListener("click", function(){ editPlanTitle(p); });
+      var editBtn = el("button", { className: "small", text: "수정" });
+      editBtn.addEventListener("click", function(){ state.editingPlanId = p.id; renderPlans(); });
       var histBtn = el("button", { className: "small", text: "수정 이력 보기" });
       var histBox = el("div", { className: "history-list" });
       histBtn.addEventListener("click", async function(){
@@ -234,7 +241,7 @@
           histBox.appendChild(el("div", { text: "아직 수정한 적 없습니다." }));
         }else{
           h.history.forEach(function(row){
-            histBox.appendChild(el("div", { text: "[" + fmtDate(row.snapshot_at) + "] " + row.title + " / 우선순위 " + row.priority + " / 예상 " + row.estimated_hours + "h" }));
+            histBox.appendChild(el("div", { text: "[" + fmtDate(row.snapshot_at) + "] " + row.title + " / " + row.period_start + "~" + row.period_end + " / 우선순위 " + row.priority + " / 예상 " + row.estimated_hours + "h / 성공기준: " + row.success_criteria }));
           });
         }
         histBox.setAttribute("data-open", "1");
@@ -248,6 +255,55 @@
     });
   }
 
+  function buildPlanEditForm(p){
+    var form = el("form");
+    var titleInput = el("input", { attrs: { value: p.title, required: "required" } });
+    var startInput = el("input", { attrs: { type: "date", value: p.period_start, required: "required" } });
+    var endInput = el("input", { attrs: { type: "date", value: p.period_end, required: "required" } });
+    var prioritySelect = el("select");
+    ["high","medium","low"].forEach(function(v){
+      var opt = el("option", { text: v === "high" ? "높음" : (v === "medium" ? "보통" : "낮음"), attrs: { value: v } });
+      if(v === p.priority) opt.selected = true;
+      prioritySelect.appendChild(opt);
+    });
+    var criteriaInput = el("textarea", { text: p.success_criteria });
+    var hoursInput = el("input", { attrs: { type: "number", min: "0", step: "0.5", value: p.estimated_hours, required: "required" } });
+
+    [
+      ["제목", titleInput], ["시작일", startInput], ["종료일", endInput],
+      ["우선순위", prioritySelect], ["성공 기준", criteriaInput], ["예상 시간(시간)", hoursInput]
+    ].forEach(function(pair){
+      form.appendChild(el("label", { text: pair[0] }));
+      form.appendChild(pair[1]);
+    });
+
+    var btnRow = el("div", { className: "btn-row" });
+    var saveBtn = el("button", { className: "small primary", text: "저장", attrs: { type: "submit" } });
+    var cancelBtn = el("button", { className: "small", text: "취소", attrs: { type: "button" } });
+    cancelBtn.addEventListener("click", function(){ state.editingPlanId = null; renderPlans(); });
+    btnRow.appendChild(saveBtn);
+    btnRow.appendChild(cancelBtn);
+    form.appendChild(btnRow);
+
+    form.addEventListener("submit", async function(e){
+      e.preventDefault();
+      await api("/api/plans/" + p.id, {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: titleInput.value.trim(),
+          period_start: startInput.value,
+          period_end: endInput.value,
+          priority: prioritySelect.value,
+          success_criteria: criteriaInput.value.trim(),
+          estimated_hours: hoursInput.value
+        })
+      });
+      state.editingPlanId = null;
+      await loadPlans();
+    });
+    return form;
+  }
+
   function renderSelectedPlanTitle(){
     var plan = state.plans.find(function(p){ return p.id === state.selectedPlanId; });
     document.getElementById("selected-plan-title").textContent = plan ? plan.title : "계획을 먼저 선택하세요";
@@ -259,15 +315,6 @@
     renderSelectedPlanTitle();
     loadTasks();
     loadReview();
-  }
-
-  async function editPlanTitle(plan){
-    var next = window.prompt("새 제목", plan.title);
-    if(next == null || next.trim() === "" || next === plan.title) return;
-    await api("/api/plans/" + plan.id, {
-      method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: next })
-    });
-    await loadPlans();
   }
 
   document.getElementById("form-plan").addEventListener("submit", async function(e){
@@ -358,6 +405,13 @@
     }
     state.tasks.forEach(function(t){
       var item = el("div", { className: "task-item" + (t.status === "done" ? " done" : "") });
+
+      if(state.editingTaskId === t.id){
+        item.appendChild(buildTaskEditForm(t));
+        list.appendChild(item);
+        return;
+      }
+
       var h3 = el("h3", { text: t.title });
       item.appendChild(h3);
 
@@ -381,7 +435,7 @@
         btnRow.appendChild(doneBtn);
       }
       var editBtn = el("button", { className: "small", text: "수정" });
-      editBtn.addEventListener("click", function(){ editTask(t); });
+      editBtn.addEventListener("click", function(){ state.editingTaskId = t.id; renderTasks(); });
       var delBtn = el("button", { className: "small danger", text: "삭제" });
       delBtn.addEventListener("click", async function(){
         if(!window.confirm("이 할 일을 지울까요?")) return;
@@ -400,15 +454,55 @@
     });
   }
 
-  async function editTask(t){
-    var title = window.prompt("할 일 제목", t.title);
-    if(title == null) return;
-    var due = window.prompt("마감일 (YYYY-MM-DD, 없으면 비우기)", t.due_date || "");
-    await api("/api/tasks/" + t.id, {
-      method: "PUT", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title: title, due_date: due || null })
+  function buildTaskEditForm(t){
+    var tags;
+    try{ tags = JSON.parse(t.tags || "[]"); }catch(e){ tags = []; }
+
+    var form = el("form");
+    var titleInput = el("input", { attrs: { value: t.title, required: "required" } });
+    var dueInput = el("input", { attrs: { type: "date" } });
+    if(t.due_date) dueInput.value = t.due_date;
+    var prioritySelect = el("select");
+    ["high","medium","low"].forEach(function(v){
+      var opt = el("option", { text: v === "high" ? "높음" : (v === "medium" ? "보통" : "낮음"), attrs: { value: v } });
+      if(v === t.priority) opt.selected = true;
+      prioritySelect.appendChild(opt);
     });
-    await loadTasks();
+    var tagsInput = el("input", { attrs: { value: tags.join(", ") } });
+    var hoursInput = el("input", { attrs: { type: "number", min: "0", step: "0.5", value: t.estimated_hours } });
+
+    [
+      ["할 일", titleInput], ["마감일(비우면 없음)", dueInput],
+      ["우선순위", prioritySelect], ["태그(쉼표로 구분)", tagsInput], ["예상 시간(시간)", hoursInput]
+    ].forEach(function(pair){
+      form.appendChild(el("label", { text: pair[0] }));
+      form.appendChild(pair[1]);
+    });
+
+    var btnRow = el("div", { className: "btn-row" });
+    var saveBtn = el("button", { className: "small primary", text: "저장", attrs: { type: "submit" } });
+    var cancelBtn = el("button", { className: "small", text: "취소", attrs: { type: "button" } });
+    cancelBtn.addEventListener("click", function(){ state.editingTaskId = null; renderTasks(); });
+    btnRow.appendChild(saveBtn);
+    btnRow.appendChild(cancelBtn);
+    form.appendChild(btnRow);
+
+    form.addEventListener("submit", async function(e){
+      e.preventDefault();
+      await api("/api/tasks/" + t.id, {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: titleInput.value.trim(),
+          due_date: dueInput.value || null,
+          priority: prioritySelect.value,
+          tags: tagsInput.value,
+          estimated_hours: hoursInput.value
+        })
+      });
+      state.editingTaskId = null;
+      await loadTasks();
+    });
+    return form;
   }
 
   function toggleLogForm(task, box){
