@@ -9,4 +9,4 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "t06-plandoc-diary-db"
-database_id = "REPLACE_WITH_YOUR_DATABASE_ID"
+database_id = "b0ae5ea1-52d8-4a37-bc90-0cf6fb317cc3"
